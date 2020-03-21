@@ -1,0 +1,302 @@
+安装Nideshop全过程（基于CentOS7.7）
+适用于本地开发端和服务器生产端
+
+1.安装CENTOS7.7 
+   选择gnome桌面安装 选择管理工具，基本开发工具，安全工具
+
+
+2.VBOX里安装后，安装增强功能
+使用VirtualBox虚机安装才需要
+
+
+3.打开sshd
+   sudo systemctl enable sshd
+   sudo systemctl start sshd
+
+
+4. 安装RHEL扩展源 
+   sudo yum install epel-release -y
+
+
+5. 安装dnf包管理工具
+   sudo yum install dnf -y
+   sudo yum install dnf-plugins-core -y
+
+
+6.  更新系统
+   sudo dnf update
+
+
+7. 从源代码安装Git （CENTOS二进制安装版本太旧）
+https://git-scm.com/book/zh/v2/起步-安装-Git
+
+i) 安装 Git 依赖的库
+sudo dnf install dh-autoreconf curl-devel expat-devel gettext-devel openssl-devel perl-devel zlib-devel  -y
+
+ii) 添加文档的多种格式（doc、html、info）
+sudo dnf install asciidoc xmlto docbook2X  -y
+
+iii) 解决二进制文件名的不同
+sudo ln -s /usr/bin/db2x_docbook2texi /usr/bin/docbook2x-texi
+
+iv) 下载Git源代码 v2.25.2
+sudo wget https://www.kernel.org/pub/software/scm/git/git-2.25.2.tar.gz
+
+v) 编译并安装：以sudo运行以下命令
+$ tar -zxf git-2.25.2.tar.gz
+$ cd git-2.25.2
+$ make configure
+$ ./configure --prefix=/usr
+$ make all doc info
+$ sudo make install install-doc install-html install-info
+
+
+8.  安装配置Nginx 
+https://qizhanming.com/blog/2018/08/06/how-to-install-nginx-on-centos-7
+
+i)安装，启动服务并设置开机启动服务
+ sudo dnf install nginx -y
+ sudo systemctl start nginx
+ sudo systemctl enable nginx
+
+ii)打开防火墙端口
+sudo firewall-cmd --zone=public --permanent --add-service=http
+sudo firewall-cmd --reload
+打开之后，可以查看一下防火墙打开的所有的服务
+sudo firewall-cmd --list-service
+
+
+9.  安装Node.js
+https://www.nideshop.com/documents/nideshop-manual/deployment-centos
+
+i) 安装nvm 0.33.5
+cd ~
+curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.5/install.sh | bash
+验证安装是否成功
+source ~/.bashrc
+nvm --version
+显示0.33.5 则成功
+
+ii) 用nvm安装node.js 8.x (Nideshop需要8.x以上支持）
+nvm ls-remote
+nvm install v8.17.0
+node -v
+看到输出版本信息 v8.17.0表示安装成功
+
+
+10. 安装配置 MySQL5.7
+https://www.jianshu.com/p/1dab9a4d0d5f
+
+i) 下载安装MySQL5.7源
+wget https://dev.mysql.com/get/mysql57-community-release-el7-11.noarch.rpm
+sudo dnf  localinstall mysql57-community-release-el7-11.noarch.rpm
+
+ii) 安装MySQL 5.7, 启动服务，设置开机启动服务
+sudo dnf install -y mysql-community-server
+sudo systemctl start mysqld
+sudo systemctl enable mysqld
+可以通过以下命令查看mysql运行状态
+sudo systemctl status mysqld
+
+iii）设置mysql的root密码
+通过以下命令找出保存在/var/log/mysqld.log中的临时密码
+sudo grep 'temporary password' /var/log/mysqld.log
+使用上述密码
+sudo mysql -u root -p
+密码登入后，mysql>提示符下
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'xxxxxxxx';
+或
+SET PASSWORD FOR   'root'@'localhost'=password('xxxxxxxx');
+修改密码为xxxxxxxx 密码必须包含：大小写字母、数字和特殊符号，并且长度不能少于8位
+以后通过以下命令修改密码为xxxxxxxx
+use mysql;
+update user set password=PASSWORD('xxxxxxxx') where user='root';
+flush privileges;
+
+iv) 设置默认编码为utf8
+修改 /etc/my.cnf 配置文件，在相关节点（没有则自行添加）下添加编码配置，如下：
+[mysqld]
+character-set-server=utf8
+[client]
+default-character-set=utf8
+[mysql]
+default-character-set=utf8
+重启mysql服务，查询编码。可以看到已经改过来了
+shell> systemctl restart mysqld
+shell> mysql -uroot -p
+mysql> show variables like 'character%';
+
+v) 默认配置文件路径：(按照需要更改)
+配置文件：/etc/my.cnf
+日志文件：/var/log/mysqld.log
+服务启动脚本：/usr/lib/systemd/system/mysqld.service
+socket文件：/var/run/mysqld/mysqld.pid
+
+
+****************************************************************************************************************************
+---------------------------------以上为底层架构安装，以下进入NideShop安装 ------------------------------------------ 
+**************************************************************************************************************************** 
+
+11. 安装配置NideShop
+用root登录CentOS
+i) 下载 NideShop 的源码
+mkdir /var/www
+cd /var/www
+git clone https://github.com/tumobi/nideshop
+
+ii) 建立node和npm软链接到系统目录
+以下/home/woohsutung/是之前安装nodejs时的目录, v8.17.0是当时安装的版本，可以进到目录查看后确定
+ln -s  /home/woohsutung/.nvm/versions/node/v8.17.0/bin/node  /usr/bin/node
+ln -s  /home/woohsutung/.nvm/versions/node/v8.17.0/bin/npm  /usr/bin/npm
+
+iii) 全局安装 ThinkJS 命令
+使用安装nodejs时的账号登录CentOS
+cd ~
+npm install -g think-cli
+用下面命令检查thinkjs
+thinkjs -v
+(无法运行)
+
+iv) 安装依赖
+使用root登录CentOS
+cd /var/www/nideshop
+npm install 
+
+v) 创建数据库并导入数据
+cd /var/www/nideshop
+mysql -u root -p -e "create database nideshop character set utf8mb4"
+输入数据库root账户密码后生成数据库
+mysql -uroot -p nideshop < /var/www/nideshop/nideshop.sql
+输入数据库root账户密码后导入数据库
+
+vi) 修改数据库配置
+cd /var/www/nideshop
+vi src/common/config/database.js 
+修改后：
+const mysql = require('think-model-mysql');
+module.exports = {
+    handle: mysql,
+    database: 'nideshop',
+    prefix: 'nideshop_',
+    encoding: 'utf8mb4',
+    host: '127.0.0.1',
+    port: '3306',
+    user: 'root',
+    password: '你的密码',
+    dateStrings: true
+};
+其中password中替换你的mysql数据库root账户密码
+
+vii) 编译项目，以生产模式启动并验证
+cd /var/www/nideshop
+npm run compile
+node production.js
+打开另一个终端验证是否启动成功
+curl -I http://127.0.0.1:8360/
+输出 HTTP/1.1 200 OK，则表示成功
+回到之前终端，Ctrl + C 停止运行
+
+
+12. 使用PM2管理服务
+i)安装配置 pm2
+cd /var/www/nideshop
+npm install -g pm2
+vi pm2.json 
+修改pm2.json为：
+{
+  "apps": [{
+    "name": "nideshop",
+    "script": "production.js",
+    "cwd": "/var/www/nideshop",
+    "exec_mode": "fork",
+    "max_memory_restart": "256M",
+    "autorestart": true,
+    "node_args": [],
+    "args": [],
+    "env": {
+
+    }
+  }]
+}
+如果服务器配置较高，可适当调整 max_memory_restart（比如1G） 和instances的值（instances没找到）
+
+
+ii) 建立pm2软链接到系统目录
+以下/home/woohsutung/是之前安装nodejs时的目录, v8.17.0是当时安装的版本，可以进到目录查看后确定
+ln -s  /home/woohsutung/.nvm/versions/node/v8.17.0/bin/pm2  /usr/bin/pm2
+
+iii)启动pm2
+cd /var/www/nideshop
+pm2 start pm2.json
+打开另一个终端验证是否启动成功
+curl -I http://127.0.0.1:8360/
+输出 HTTP/1.1 200 OK，则表示成功
+
+
+13. 使用Nginx做反向代理
+i)修改nginx配置
+cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
+vi /etc/nginx/nginx.conf
+修改下面server一段
+http {
+
+    …..
+
+    server {
+        listen 80;
+        server_name nideshop.com www.nideshop.com; # 改成你自己的域名
+        root /var/www/nideshop/www;
+        set $node_port 8360;
+
+        index index.js index.html index.htm;
+        if ( -f $request_filename/index.html ){
+            rewrite (.*) $1/index.html break;
+        }
+        if ( !-f $request_filename ){
+            rewrite (.*) /index.js;
+        }
+        location = /index.js {
+            proxy_http_version 1.1;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-NginX-Proxy true;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_pass http://127.0.0.1:$node_port$request_uri;
+            proxy_redirect off;
+        }
+
+        location ~ /static/ {
+            etag         on;
+            expires      max;
+        }
+    }
+}
+
+ii) 重新启动 nginx 并验证 nginx 是否还可以正常访问
+nginx -t 
+systemctl restart nginx.service
+curl  http://127.0.0.1:8360/   (此处网页遗漏了:8360 端口号)
+
+
+14. 配置https访问
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
